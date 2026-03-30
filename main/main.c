@@ -84,39 +84,6 @@ void app_main(void)
     esp_err_t sd_ret = esp_vfs_fat_sdspi_mount("/sdcard", &host, &slot_cfg, &mount_cfg, &card);
     if (sd_ret == ESP_OK) {
         ESP_LOGI(TAG, "SD card mounted");
-        // Copy chains from SD to SPIFFS
-        ESP_LOGI(TAG, "Opening /sdcard/usbane/chains");
-        DIR *d = opendir("/sdcard/usbane/chains");
-        ESP_LOGI(TAG, "opendir result: %s", d ? "ok" : "failed");
-        if (d) {
-            struct dirent *e;
-            ESP_LOGI(TAG, "Scanning chains dir...");
-            while ((e = readdir(d)) != NULL) {
-                ESP_LOGI(TAG, "Found: %s", e->d_name);
-                size_t len = strlen(e->d_name);
-                ESP_LOGI(TAG, "Checking: %s len=%d", e->d_name, (int)len);
-                if (len > 4 && (strcmp(e->d_name + len - 4, ".csv") == 0 || strcmp(e->d_name + len - 4, ".CSV") == 0)) {
-                    ESP_LOGI(TAG, "Copying: %s", e->d_name);
-                    char src[128], dst[128];
-                    snprintf(src, sizeof(src), "/sdcard/usbane/chains/%s", e->d_name);
-                    snprintf(dst, sizeof(dst), "/spiffs/chains/%s", e->d_name);
-                    FILE *in = fopen(src, "r");
-                    FILE *out = fopen(dst, "w");
-                    if (in && out) {
-                        char buf[256];
-                        size_t n;
-                        while ((n = fread(buf, 1, sizeof(buf), in)) > 0)
-                            fwrite(buf, 1, n, out);
-                        ESP_LOGI(TAG, "Copied chain: %s", e->d_name);
-                    }
-                    if (in) fclose(in);
-                    if (out) fclose(out);
-                }
-            }
-            closedir(d);
-        } else {
-            ESP_LOGW(TAG, "No /sdcard/usbane/chains dir");
-        }
     } else {
         ESP_LOGW(TAG, "SD mount failed: %s", esp_err_to_name(sd_ret));
     }

@@ -30,10 +30,12 @@
 #include <string.h>
 #include <stdarg.h>
 #include <stdlib.h>
+#include <strings.h>
 
 #include "driver/gpio.h"
 #include <dirent.h>
 #include <stdlib.h>
+#include <strings.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
@@ -93,16 +95,23 @@ static bool s_menu_dirty = true;
 static char s_usb_info_lines[5][40];
 
 static void _load_chains(void);
+static void _load_chains_task(void *arg);
 static void _chain_exec_task(void *arg);
+
 static void _usb_info_fetch_task(void *arg);
 
 /* Chain browser state */
-#define MAX_CHAINS 20
-static char s_chain_names[MAX_CHAINS][40];
+#define MAX_CHAINS 32
+typedef struct {
+    char name[64];      /* display name */
+    char path[128];     /* full path */
+    bool on_sd;         /* true=sdcard, false=spiffs */
+} fm_chain_entry_t;
+static fm_chain_entry_t s_chains[MAX_CHAINS];
 static int  s_chain_count = 0;
 static int  s_chain_sel = 0;
 static bool s_chains_loaded = false;
-static char s_chain_exec_path[64];
+static char s_chain_exec_path[128];
 
 static char s_input[SHELL_MAX_CMD_LEN+1];
 static int  s_input_len = 0, s_cursor = 0;
@@ -388,7 +397,7 @@ static void _kbd_cb(const tca8418_key_event_t *e, void *arg)
                 s_usb_info_lines[1][0] = s_usb_info_lines[2][0] = s_usb_info_lines[3][0] = 0;
                 xTaskCreate(_usb_info_fetch_task, "usb_info", 4096, NULL, 3, NULL);
             }
-            else if (s_menu_sel == 1) { s_mode = MODE_CHAINS; s_chain_sel = 0; _load_chains(); s_menu_dirty = true; }
+            else if (s_menu_sel == 1) { s_mode = MODE_CHAINS; s_chain_sel = 0; s_chain_count = 0; s_menu_dirty = true; xTaskCreate(_load_chains_task, "load_chains", 4096, NULL, 3, NULL); }
         }
         if (s_mutex) {
             xSemaphoreTake(s_mutex, portMAX_DELAY);
@@ -399,13 +408,41 @@ static void _kbd_cb(const tca8418_key_event_t *e, void *arg)
         return;
     }
     if (s_mode == MODE_CHAINS) {
-        if (e->ascii == ';') { if (s_chain_sel > 0) { s_chain_sel--; s_menu_dirty = true; } }
-        else if (e->ascii == '.') { if (s_chain_sel < s_chain_count-1) { s_chain_sel++; s_menu_dirty = true; } }
-        else if (e->ascii == '\r' && s_chain_count > 0) {
-            /* Execute selected chain in background task */
-            snprintf(s_chain_exec_path, sizeof(s_chain_exec_path), "/spiffs/chains/%s", s_chain_names[s_chain_sel]);
+        if (e->ascii == '\b') {
+            s_mode = MODE_MENU; s_menu_dirty = true;
+        } else if (e->ascii == ';') {
+            if (s_chain_sel > 0) { s_chain_sel--; s_menu_dirty = true; }
+        } else if (e->ascii == '.') {
+            if (s_chain_sel < s_chain_count-1) { s_chain_sel++; s_menu_dirty = true; }
+        } else if (e->ascii == '\r' && s_chain_count > 0) {
+            /* Execute */
+            strncpy(s_chain_exec_path, s_chains[s_chain_sel].path, 127);
             xTaskCreate(_chain_exec_task, "chain_exec", 8192, NULL, 3, NULL);
             s_mode = MODE_SHELL;
+            s_menu_dirty = true;
+        } else if (e->ascii == 'd' && s_chain_count > 0) {
+            /* Delete */
+            remove(s_chains[s_chain_sel].path);
+            xTaskCreate(_load_chains_task, "load_chains", 4096, NULL, 3, NULL);
+            if (s_chain_sel >= s_chain_count) s_chain_sel = s_chain_count > 0 ? s_chain_count-1 : 0;
+            s_menu_dirty = true;
+        } else if (e->ascii == 'c' && s_chain_count > 0) {
+            /* Copy SD->SPIFFS or SPIFFS->SD */
+            fm_chain_entry_t *src = &s_chains[s_chain_sel];
+            char dst[128];
+            if (src->on_sd)
+                snprintf(dst, sizeof(dst), "/spiffs/chains/%s", strrchr(src->path,'/')+1);
+            else
+                snprintf(dst, sizeof(dst), "/sdcard/usbane/chains/%s", strrchr(src->path,'/')+1);
+            FILE *in = fopen(src->path, "r");
+            FILE *out = fopen(dst, "w");
+            if (in && out) {
+                char buf[256]; size_t n;
+                while ((n = fread(buf,1,sizeof(buf),in))>0) fwrite(buf,1,n,out);
+            }
+            if (in) fclose(in);
+            if (out) fclose(out);
+            xTaskCreate(_load_chains_task, "load_chains", 4096, NULL, 3, NULL);
             s_menu_dirty = true;
         }
         if (s_mutex) {
@@ -559,18 +596,44 @@ static void _chain_exec_task(void *arg)
 static void _load_chains(void)
 {
     s_chain_count = 0;
+    /* Load from SPIFFS */
     DIR *d = opendir("/spiffs/chains");
-    if (!d) return;
-    struct dirent *e;
-    while ((e = readdir(d)) != NULL && s_chain_count < MAX_CHAINS) {
-        size_t len = strlen(e->d_name);
-        if (len > 4 && (strcmp(e->d_name+len-4, ".csv")==0 || strcmp(e->d_name+len-4, ".CSV")==0)) {
-            strncpy(s_chain_names[s_chain_count], e->d_name, 39);
-            s_chain_count++;
+    if (d) {
+        struct dirent *e;
+        while ((e = readdir(d)) != NULL && s_chain_count < MAX_CHAINS) {
+            size_t len = strlen(e->d_name);
+            if (len > 4 && (strcasecmp(e->d_name+len-4, ".csv") == 0)) {
+                snprintf(s_chains[s_chain_count].name, 63, "[SP]%s", e->d_name);
+                snprintf(s_chains[s_chain_count].path, 127, "/spiffs/chains/%s", e->d_name);
+                s_chains[s_chain_count].on_sd = false;
+                s_chain_count++;
+            }
         }
+        closedir(d);
     }
-    closedir(d);
+    /* Load from SD card */
+    DIR *d2 = opendir("/sdcard/usbane/chains");
+    if (d2) {
+        struct dirent *e;
+        while ((e = readdir(d2)) != NULL && s_chain_count < MAX_CHAINS) {
+            size_t len = strlen(e->d_name);
+            if (len > 4 && (strcasecmp(e->d_name+len-4, ".csv") == 0)) {
+                snprintf(s_chains[s_chain_count].name, 63, "[SD]%s", e->d_name);
+                snprintf(s_chains[s_chain_count].path, 127, "/sdcard/usbane/chains/%s", e->d_name);
+                s_chains[s_chain_count].on_sd = true;
+                s_chain_count++;
+            }
+        }
+        closedir(d2);
+    }
     s_chains_loaded = true;
+}
+
+static void _load_chains_task(void *arg)
+{
+    _load_chains();
+    s_menu_dirty = true;
+    vTaskDelete(NULL);
 }
 
 static void _usb_info_fetch_task(void *arg)
@@ -622,17 +685,18 @@ static void _draw_menu(void)
     } else if (s_mode == MODE_CHAINS) {
         _draw_string(0, SCROLL_Y_START, "== CHAINS ==", COL_PROMPT, COL_BLACK, 1);
         if (s_chain_count == 0) {
-            _draw_string(0, SCROLL_Y_START+CHAR_H, "No chains on SPIFFS", COL_WARN, COL_BLACK, 1);
-            _draw_string(0, SCROLL_Y_START+CHAR_H*2, "Upload via web UI or SD", COL_INFO, COL_BLACK, 1);
+            _draw_string(0, SCROLL_Y_START+CHAR_H, "No chains found", COL_WARN, COL_BLACK, 1);
+            _draw_string(0, SCROLL_Y_START+CHAR_H*2, "Add to SD or web UI", COL_INFO, COL_BLACK, 1);
         } else {
-            int visible = (SCROLL_Y_END - SCROLL_Y_START - CHAR_H) / CHAR_H;
+            int visible = (SCROLL_Y_END - SCROLL_Y_START - CHAR_H*2) / CHAR_H;
             int start = s_chain_sel >= visible ? s_chain_sel - visible + 1 : 0;
             for (int i = 0; i < visible && (start+i) < s_chain_count; i++) {
                 int idx = start + i;
                 uint16_t fg = (idx == s_chain_sel) ? COL_BLACK : COL_WHITE;
                 uint16_t bg = (idx == s_chain_sel) ? COL_PROMPT : COL_BLACK;
-                _draw_string(0, SCROLL_Y_START+CHAR_H*(i+1), s_chain_names[idx], fg, bg, 1);
+                _draw_string(0, SCROLL_Y_START+CHAR_H*(i+1), s_chains[idx].name, fg, bg, 1);
             }
+            _draw_string(0, SCROLL_Y_END-CHAR_H, "ENT=run D=del C=copy BS=back", COL_INFO, COL_BLACK, 1);
         }
     }
 }
