@@ -1,0 +1,11 @@
+idf_component_register(
+    SRCS
+        "cardputer_adv_display.c"
+    INCLUDE_DIRS
+        "include"
+    REQUIRES
+        driver
+        esp_lcd
+        log
+        freertos
+)

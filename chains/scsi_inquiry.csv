@@ -1,0 +1,7 @@
+# SCSI INQUIRY via USB MSC Bulk-Only Transport
+# Step 1: Send CBW (31 bytes)
+bulk_out,1,55534243010000002400000080000612000000240000000000000000000000,1,1000
+# Step 2: Read INQUIRY response (36 bytes)
+bulk_in,1,36,1,1000,0,1
+# Step 3: Read CSW (13 bytes)
+bulk_in,1,13,1,1000,0,1

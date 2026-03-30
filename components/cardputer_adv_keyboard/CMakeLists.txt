@@ -1,0 +1,10 @@
+idf_component_register(
+    SRCS
+        "tca8418.c"
+    INCLUDE_DIRS
+        "include"
+    REQUIRES
+        driver
+        log
+        freertos
+)

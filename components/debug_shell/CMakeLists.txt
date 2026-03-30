@@ -1,0 +1,16 @@
+idf_component_register(
+    SRCS
+        "debug_shell.c"
+    INCLUDE_DIRS
+        "include"
+        "${CMAKE_SOURCE_DIR}/main"
+    REQUIRES
+        main
+        esp_driver_gpio
+        cardputer_adv_display
+        cardputer_adv_keyboard
+        driver
+        log
+        freertos
+        esp_system
+)

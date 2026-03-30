@@ -1,0 +1,10 @@
+# Probe Analogue Pocket vendor commands
+# QUERY (0x00) - expect 36 bytes back
+# Try bmRequestType=0xC0 (Vendor, Device, IN)
+control,0xC0,0x00,0x0000,0x0000,36,8,separate,,1,
+waitfor,delay,10
+# STATUS_POLL (0x41) - expect 4 bytes
+control,0xC0,0x41,0x0000,0x0000,4,8,separate,,1,
+waitfor,delay,10
+# INPUT_FULL_POLL (0x40) - expect 128 bytes
+control,0xC0,0x40,0x0000,0x0000,128,8,separate,,1,

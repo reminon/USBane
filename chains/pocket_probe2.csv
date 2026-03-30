@@ -1,0 +1,8 @@
+# Try vendor INTERFACE IN (0xC1)
+control,0xC1,0x00,0x0000,0x0000,36,8,separate,,1,
+waitfor,delay,10
+# Try vendor INTERFACE with wIndex=1
+control,0xC1,0x00,0x0000,0x0001,36,8,separate,,1,
+waitfor,delay,10
+# Try class IN (0xA1)
+control,0xA1,0x00,0x0000,0x0000,36,8,separate,,1,

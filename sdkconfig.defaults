@@ -1,0 +1,59 @@
+# USBane Configuration
+CONFIG_USBANE_VERSION="0.2.3"
+
+# Partition Table - Use two OTA partitions for future OTA updates (1700KB each)
+CONFIG_PARTITION_TABLE_TWO_OTA_LARGE=y
+
+# Flash Configuration - 8MB for extra space, QIO mode for performance
+CONFIG_ESPTOOLPY_FLASHSIZE_8MB=y
+CONFIG_ESPTOOLPY_FLASHFREQ_80M=y
+CONFIG_ESPTOOLPY_FLASHMODE_QIO=y
+CONFIG_ESPTOOLPY_FLASHMODE="qio"
+
+# Enable USB OTG peripheral (hardware capability)
+CONFIG_USB_OTG_SUPPORTED=y
+
+# Logging - INFO level for debugging
+CONFIG_LOG_DEFAULT_LEVEL_INFO=y
+CONFIG_LOG_MAXIMUM_LEVEL_DEBUG=y
+CONFIG_BOOTLOADER_LOG_LEVEL_WARN=y
+
+# CPU Frequency - 240MHz required for Full-Speed USB bit-banging
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ=240
+
+# Compiler Optimizations
+CONFIG_COMPILER_OPTIMIZATION_PERF=y
+CONFIG_COMPILER_OPTIMIZATION_ASSERTIONS_DISABLE=y
+
+# HTTP Server Optimizations
+CONFIG_HTTPD_MAX_REQ_HDR_LEN=512
+CONFIG_HTTPD_MAX_URI_LEN=256
+CONFIG_HTTPD_WS_SUPPORT=y
+
+# Disable unused features
+CONFIG_BT_ENABLED=n
+CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH=n
+
+# FreeRTOS - Enable runtime statistics and high precision timing
+CONFIG_FREERTOS_HZ=1000
+CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS=y
+CONFIG_FREERTOS_USE_TRACE_FACILITY=y
+CONFIG_FREERTOS_USE_STATS_FORMATTING_FUNCTIONS=y
+
+# High precision timing for USB timing attacks
+CONFIG_ESP_TIMER_SUPPORTS_ISR_DISPATCH_METHOD=y
+CONFIG_ESP_TIMER_IN_IRAM=y
+
+# High resolution timer (for precise USB bit-banging)
+CONFIG_ESP_TIMER_IMPL_SYSTIMER=y
+
+# Disable cache when running IRAM code for consistent timing
+CONFIG_ESP_SYSTEM_SINGLE_CORE_MODE=n
+
+# Place critical code in IRAM for consistent timing
+CONFIG_SPI_FLASH_ROM_IMPL=y
+
+# Main task stack size
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192
+

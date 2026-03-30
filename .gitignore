@@ -1,0 +1,21 @@
+# Build output
+build/
+sdkconfig
+sdkconfig.old
+
+# IDE
+.vscode/
+.idea/
+*.code-workspace
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+#Local testing
+chains/priv/
+reference/
+tools/
